@@ -1,0 +1,201 @@
+В Fiddler существует инструмент "Fiddler ScriptEditor" для создания правил модификации трафика. 
+Запуск редактора скриптов через "Ctrl+R" или выбора пункта меню "Rules -> Customize Rules".
+
+В редакторе скриптов есть два основных метода: "OnBeforeRequest" и "OnBeforeResponse":
+"OnBeforeRequest" - выполнение скриптов в этом методе происходит перед отправкой пакетов на веб-сервер.
+"OnBeforeResponse" - выполнение скриптов в этом методе происходит после получения ответа от веб-сервера.
+__________________________________________________________________________
+
+Ниже приведены примеры скриптов с указанием в каком методе их расположить:
+
+Задача 1: Запрет сайта
+Запрещаем переход на адрес сайта содержащий строку.
+
+// OnBeforeRequest
+if (oSession.uriContains("//ya.ru/")) oSession.host = 'access.denied';
+
+__________________________________________________________________________
+
+Задача 2: Запрет загрузки ресурса
+Запрещаем загрузку ".svg" файлов для заданного адреса сайта.
+
+// OnBeforeRequest
+if (oSession.uriContains("yastatic.net") && oSession.url.EndsWith(".svg"))
+{
+		oSession.host = 'na.derevnu.dedushke';
+}
+
+// или
+
+// OnBeforeRequest
+if (oSession.uriContains("yastatic.net") && oSession.url.EndsWith(".svg"))
+{
+		oSession.responseBodyBytes = new byte[0];
+}
+
+// OnBeforeResponse
+if (oSession.uriContains("yastatic.net") && oSession.url.EndsWith(".svg"))
+{
+		oSession.ResponseBody = null;
+}
+
+__________________________________________________________________________
+
+Задача 3: Переадресация запроса
+Переадресация запроса на адрес сайта содержащий строку.
+
+// OnBeforeRequest
+if (oSession.uriContains("//ya.ru/")) oSession.url = "yandex.ru"
+
+__________________________________________________________________________
+
+Задача 4: Сбор данных
+Пользователи подключаются через данный прокси-сервер и делают в браузерах некоторые запросы вида "https://myhost.ru?key=abcd&vin=VF38BLFXE81078232&lang=ru". Задача записать в базу данных событие поиска и передать значение vin-номера. Данный скрипт создает файлы с названием включающем vin-номер. Кроме скрипта необходимо создать утилиту/службу, которая раз в заданный интервал читает каталог "C:\vinsearch\" и записывает данные в базу данных.
+
+// OnBeforeResponse
+if(oSession.uriContains("https://myhost.ru?key=") && oSession.uriContains("&vin="))
+{
+		oSession.utilDecodeResponse();
+		// поиск позиции индекса начала vin-номера
+		var startVin = oSession.url.IndexOf("vin=") + 4;
+
+		// поиск позиции индекса конца vin-номера
+		var endVin = oSession.url.IndexOf("&", startVin);
+
+  	// поиск подстроки зная индекс начала и индекс конца подстроки
+		var vin = oSession.url.Substring(startVin, endVin - startVin);
+
+		// создание файла с именем типа vin_текущееЗначениеМиллисекунд.txt
+		oSession.SaveResponseBody("C:\\vinsearch\\" + vin + "_" + DateTime.Now.Millisecond + ".txt");
+}
+
+__________________________________________________________________________
+
+Задача 5: Изменить текст в ответе
+В данном примере меняем текст "Иванов" на "Петров".
+
+// OnBeforeResponse
+if (oSession.uriContains("https://myhost.ru"))
+{
+		oSession.utilDecodeResponse();
+  	oSession.utilReplaceInResponse('Иванов','Петров');
+}
+
+__________________________________________________________________________
+
+Задача 6: Заменить ресурс веб-портала на локальный ресурс
+Заменим картинку веб-портала на картинку расположенною на локальном диске.
+
+// OnBeforeResponse
+if (oSession.uriContains("/Static/app/img/world.svg"))
+{
+		oSession.LoadResponseFromFile("c:/scripts/lang.png");	
+}
+
+__________________________________________________________________________
+
+Задача 7: Изменение свойств HTML-объектов
+Например, есть картинка с заданными размерами в HTML и нужно эти размеры изменить.
+
+// OnBeforeResponse
+oSession.utilReplaceInResponse('/Static/app/img/world.svg" height="15" width="15" style="height: 15px','/Static/app/img/world.svg" height="1" width="1" style="height: 1px');
+
+__________________________________________________________________________
+
+Задача 8: Скрыть элементы по className меняя css-файлы
+В данном примере скрываем элементы зная их className в css-файле добавляя свойство "visibility: hidden;"
+
+// OnBeforeResponse
+oSession.utilDecodeResponse();
+oSession.utilReplaceInResponse("#header_Area_Right {", "#header_Area_Right { visibility: hidden; ");
+
+__________________________________________________________________________
+
+Задача 9: Заставить страницу открываться в текущем окне
+Пример: существует JavaScript, который открывает ссылку в новом окне. Нужно сделать чтобы ссылка открывалась в текущем окне.
+
+// OnBeforeResponse
+if (oSession.uriContains("myhost.ru") && oSession.uriContains(".js"))
+{
+		oSession.utilDecodeResponse();
+		oSession.utilReplaceInResponse("window.open(url, '_blank', option);", "window.open(url);");
+}
+
+__________________________________________________________________________
+
+Задача 10: Выполнение скриптов для определенных IP
+В данном примере меняем текст "Иванов" на "Петров" только для IP = "192.168.0.100"
+
+// OnBeforeResponse
+if (oSession.clientIP == '192.168.0.100')
+{
+		oSession.utilDecodeResponse();
+		oSession.utilReplaceInResponse('Иванов','Петров');
+}
+
+__________________________________________________________________________
+
+Задача 11: Меняем css-стили портала
+Css-файлы веб-портала можно сохранить на локальном диске, отредактировать и настроить скрипт отдавать стили с локального диска, а не с портала.
+
+// OnBeforeResponse	
+if (oSession.uriContains("/banner.css"))
+{
+		oSession.LoadResponseFromFile("c:/scripts/banner.css");	
+}
+
+__________________________________________________________________________
+
+Задача 12: Запрет PUT-команды и аналогичных
+Запрет команды по ее типу: "PUT", "DELETE", etc.
+
+// OnBeforeRequest
+if (oSession.HTTPMethodIs("PUT") && oSession.uriContains("https://myhost.ru/"))
+{
+		oSession.host = 'access.denied';
+}
+
+__________________________________________________________________________
+
+Задача 13: Изменение тела POST-запроса
+Изменить тело POST-запроса для заданного портала. При авторизации на данном портале вне зависимости от введенных пользователем данных на веб-портал отправятся данные из скрипта.
+
+// OnBeforeRequest		
+if (oSession.uriContains("https://myhost.ru/") && oSession.RequestMethod == "POST")
+{
+		oSession.utilSetRequestBody("username=xxx&password=yyy");	
+}
+
+__________________________________________________________________________
+
+Задача 14: Меняем заголовки HTTP-пакета
+Заголовки пакетов можно легко редактировать: удалять, добавлять, изменять.
+
+// OnBeforeRequest
+
+// Удалить заголовок с именем 'User-Agent'
+oSession.oRequest.headers.Remove("User-Agent");
+
+// Добавить заголовок 'xxx' со значением 'yyy'
+oSession.oRequest.headers.Add("xxx", "yyy");
+
+// Изменить значение заголовка с именем 'User-Agent' на значение 'xxx' 
+oSession.oRequest.headers["User-Agent"] = "xxx";
+
+__________________________________________________________________________
+
+Задача 15: Меняем Cookie
+Работа с Cookie: добавление, удаление, редактирование
+
+// OnBeforeRequest - добавить в запрос Cookie
+oSession.oRequest["Cookie"] = (oSession.oRequest["Cookie"] + ";mycookie=xxx");
+
+// OnBeforeRequest - изменить значение Cookie 'JSESSIONID' на 'xxx'
+oSession.oRequest['Cookie'] = oSession.oRequest['Cookie'].Replace("JSESSIONID=","ignoredCookie=") + ";JSESSIONID=xxx";
+
+// OnBeforeRequest - удалить Cookie 'JSESSIONID'
+oSession.oRequest['Cookie'] = oSession.oRequest['Cookie'].Replace("JSESSIONID=","ignoredCookie=");
+
+__________________________________________________________________________
+
+Источник: https://habr.com/ru/post/554562/
